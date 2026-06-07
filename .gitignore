@@ -31,3 +31,6 @@ Thumbs.db
 # Build/junk artifacts
 *.zip
 skills-lock.json
+
+# Demo-video tooling (heavy: browsers, venv, node_modules, renders) — kept local
+demotools/
