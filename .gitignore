@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Environment / secrets
+.env
+*.local
+
+# Node / dashboard build
+dashboard/node_modules/
+dashboard/dist/
+
+# ML artifacts
+data/risk_model.joblib
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Agent skills / local tooling (not part of the app)
+.agents/
+.claude/
+*.tgz
+
+# Build/junk artifacts
+*.zip
+skills-lock.json

@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Theme tokens (R G B channels) ─────────────────────────────────
+   Dark is the default; .light overrides. Components reference these
+   via Tailwind colors (bg-ink, text-txt, border-line/40, …). */
+:root, html.dark {
+  --c-ink:      7 10 15;
+  --c-surface:  11 15 22;
+  --c-panel:    15 20 29;
+  --c-raised:   20 27 38;
+  --c-line:     27 36 48;
+  --c-line2:    38 49 63;
+  --c-txt:      214 221 232;
+  --c-sub:      138 151 168;
+  --c-muted:    91 103 118;
+  --c-brand:    240 180 41;
+  --c-onbrand:  10 13 20;
+  --c-branddim: 122 95 23;
+  --c-allow:    63 185 80;
+  --c-flag:     68 147 248;
+  --c-block:    248 81 73;
+  --c-high:     251 133 0;
+  --grid-line:  255 255 255;
+  --grid-alpha: 0.018;
+  --shadow-panel: 0 1px 0 0 rgba(255,255,255,0.02) inset, 0 10px 30px -18px rgba(0,0,0,0.8);
+  color-scheme: dark;
+}
+
+html.light {
+  --c-ink:      244 246 249;
+  --c-surface:  255 255 255;
+  --c-panel:    255 255 255;
+  --c-raised:   241 244 248;
+  --c-line:     225 230 237;
+  --c-line2:    203 211 221;
+  --c-txt:      24 33 48;
+  --c-sub:      82 93 108;
+  --c-muted:    130 140 154;
+  --c-brand:    176 124 16;
+  --c-onbrand:  255 255 255;
+  --c-branddim: 214 180 100;
+  --c-allow:    22 138 70;
+  --c-flag:     37 99 235;
+  --c-block:    220 53 56;
+  --c-high:     201 96 0;
+  --grid-line:  20 30 50;
+  --grid-alpha: 0.04;
+  --shadow-panel: 0 1px 2px rgba(20,30,50,0.06), 0 12px 30px -20px rgba(20,30,50,0.25);
+  color-scheme: light;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: rgb(var(--c-ink));
+  color: rgb(var(--c-txt));
+  font-family: 'Inter Variable', Inter, system-ui, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.5s ease, color 0.4s ease;
+}
+
+/* Blueprint grid — themed line color */
+.bp-grid {
+  background-image:
+    linear-gradient(rgb(var(--grid-line) / var(--grid-alpha)) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--grid-line) / var(--grid-alpha)) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.bp-radial {
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgb(var(--c-brand) / 0.05), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgb(var(--c-flag) / 0.05), transparent 60%);
+}
+
+/* Animated aurora background (React-Bits style) */
+.aurora-bg { position: relative; overflow: hidden; }
+.aurora-bg::before {
+  content: ''; position: absolute; inset: -40%;
+  background:
+    radial-gradient(40% 40% at 30% 30%, rgb(var(--c-brand) / 0.16), transparent 60%),
+    radial-gradient(40% 40% at 70% 60%, rgb(var(--c-flag) / 0.14), transparent 60%),
+    radial-gradient(35% 35% at 55% 80%, rgb(var(--c-allow) / 0.10), transparent 60%);
+  filter: blur(36px);
+  animation: aurora 18s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Gradient / shiny text */
+.grad-text {
+  background: linear-gradient(90deg, rgb(var(--c-brand)), rgb(var(--c-flag)), rgb(var(--c-brand)));
+  background-size: 200% auto;
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  animation: shimmer 6s linear infinite;
+}
+
+.eyebrow { font-size: 0.625rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(var(--c-muted)); font-weight: 600; }
+.tnum { font-variant-numeric: tabular-nums; }
+.hr { height: 1px; background: rgb(var(--c-line)); }
+
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--c-line2)) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: rgb(var(--c-line)); border-radius: 99px; }
+*::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-line2)); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+::selection { background: rgb(var(--c-brand) / 0.25); }
+:focus-visible { outline: 2px solid rgb(var(--c-brand) / 0.6); outline-offset: 1px; }
+
+@keyframes pulse-slow { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.animate-pulse-slow { animation: pulse-slow 2s ease-in-out infinite; }

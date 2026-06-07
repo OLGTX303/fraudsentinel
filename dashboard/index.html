@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#070a0f" />
+    <meta name="description" content="FraudSentinel — a Gemini-powered agent that investigates suspicious transactions in real time and stays fully observable in Arize." />
+    <title>FraudSentinel — AI Fraud Investigation Console</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f0b429' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='24' height='24' rx='5' fill='%23070a0f' stroke='none'/%3E%3Cpath d='M12 4l6 2.5v4c0 3.8-2.6 6.4-6 7.5-3.4-1.1-6-3.7-6-7.5v-4L12 4z'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Apply the theme before render to avoid a flash of the wrong theme.
+      (function () {
+        try {
+          var m = localStorage.getItem('fs_theme') || 'auto', t;
+          if (m === 'light' || m === 'dark') { t = m; }
+          else { var h = new Date().getHours(); t = (h >= 7 && h < 19) ? 'light' : 'dark'; }
+          document.documentElement.classList.add(t);
+        } catch (e) { document.documentElement.classList.add('dark'); }
+      })();
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
