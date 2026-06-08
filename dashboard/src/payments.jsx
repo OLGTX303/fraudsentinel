@@ -242,7 +242,10 @@ function StripeCheckout({ amount, merchant, network, disabled, onRun, latest }) 
   useEffect(() => {
     getJSON('/stripe/config').then(c => {
       if (c.enabled && c.publishable_key) {
-        if (!_stripeCache[c.publishable_key]) _stripeCache[c.publishable_key] = loadStripe(c.publishable_key)
+        if (!_stripeCache[c.publishable_key]) _stripeCache[c.publishable_key] = loadStripe(c.publishable_key, {
+          // Turn off the Stripe.js test-mode developer assistant (the floating "stripe" pill).
+          developerTools: { assistant: { enabled: false } },
+        })
         setCfg({ enabled: true, sp: _stripeCache[c.publishable_key] })
       } else setCfg({ enabled: false })
     }).catch(() => setCfg({ enabled: false }))
