@@ -82,6 +82,7 @@ class InvestigationResult(BaseModel):
     account_id: Optional[str] = None
     payment_method: Optional[str] = None                   # card / apple_pay / google_pay / paypal
     ip_connection_type: Optional[str] = None               # residential / business / datacenter / mobile
+    bin_info: Optional[dict] = None                        # card BIN pre-check result
     analyst_override: Optional[str] = None                 # set via /feedback (human-in-loop)
 
 
@@ -105,6 +106,20 @@ class LoginRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     transaction_id: Optional[str] = None   # ask about a specific case, else the latest
+
+
+class ApplePayValidateRequest(BaseModel):
+    validationURL: str
+
+
+class StripeIntentRequest(BaseModel):
+    amount: float                      # in major units (USD), converted to cents server-side
+    currency: str = "usd"
+
+
+class StripeFinalizeRequest(BaseModel):
+    payment_intent_id: str
+    decision: Literal["ALLOW", "FLAG", "BLOCK"]
 
 
 class WebSocketMessage(BaseModel):

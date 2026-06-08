@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { Icon } from './icons.jsx'
-import { cls, DECISION, SEVERITY, PAYMENT, IP_TYPE } from './lib.js'
+import { cls, DECISION, SEVERITY, PAYMENT, IP_TYPE, CARD_BRANDS } from './lib.js'
 
 gsap.registerPlugin(useGSAP)
 const REDUCE = typeof window !== 'undefined'
@@ -53,6 +53,27 @@ export function PaymentBadge({ method }) {
       <Icon name={p.icon} size={12} /> {p.label}
     </span>
   )
+}
+
+export function CardBrandMark({ brand }) {
+  if (!brand) return null
+  const b = CARD_BRANDS[brand] || CARD_BRANDS.unknown
+  const base = 'inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white border border-line2 shadow-sm'
+  if (brand === 'mastercard') return (
+    <span className={base} title="Mastercard">
+      <span className="relative w-6 h-4 inline-block">
+        <span className="absolute left-0 top-0 w-4 h-4 rounded-full" style={{ background: '#eb001b' }} />
+        <span className="absolute left-2 top-0 w-4 h-4 rounded-full opacity-90" style={{ background: '#f79e1b', mixBlendMode: 'multiply' }} />
+      </span>
+      <span className="text-[10px] font-bold text-[#1a1a1a] lowercase">mastercard</span>
+    </span>
+  )
+  if (brand === 'visa') return <span className={base} title="Visa"><span className="text-sm font-extrabold italic tracking-tight text-[#1a1f71]">VISA</span></span>
+  if (brand === 'amex') return <span className={cls(base, '!bg-[#2e77bc] !border-[#2e77bc]')} title="American Express"><span className="text-[10px] font-extrabold text-white tracking-widest">AMEX</span></span>
+  if (brand === 'unionpay') return <span className={base} title="UnionPay"><span className="text-[11px] font-extrabold"><span className="text-[#e21836]">Union</span><span className="text-[#00447c]">Pay</span></span></span>
+  if (brand === 'discover') return <span className={base} title="Discover"><span className="text-[10px] font-extrabold text-[#1a1a1a]">DISC<span className="text-[#ff6000]">VER</span></span></span>
+  if (brand === 'jcb') return <span className={base} title="JCB"><span className="text-[11px] font-extrabold tracking-tight"><span className="text-[#0b4ea2]">J</span><span className="text-[#be0028]">C</span><span className="text-[#2e8b3d]">B</span></span></span>
+  return <span className={cls(base, 'bg-transparent')} title={b.label}><span className="text-[10px] font-bold" style={{ color: b.color }}>{b.label}</span></span>
 }
 
 export function IpBadge({ type }) {
@@ -215,32 +236,35 @@ const KIND = {
 export function TraceWaterfall({ spans = [], totalMs = 0 }) {
   const root = useRef(null)
   useGSAP(() => {
-    gsap.from('.span-row', { autoAlpha: 0, x: -16, stagger: 0.05, duration: dur(0.4) })
+    gsap.from('.span-bar', { scaleX: 0, transformOrigin: 'left', stagger: 0.05, duration: dur(0.4), ease: 'power3.out' })
   }, { scope: root, dependencies: [spans.length] })
   if (!spans.length) return <div className="text-xs text-muted py-6 text-center">No spans captured for this trace.</div>
-  // Synthesize a proportional layout from span order (in-memory log has no durations).
+  // Synthesize a proportional Gantt layout from span order (in-memory log has no durations).
   const weights = spans.map((s) => (s.type === 'llm_span' ? 3 : s.type === 'investigation_result' ? 1.5 : 1))
   const totalW = weights.reduce((a, b) => a + b, 0)
   let acc = 0
+  const rows = spans.map((s, i) => {
+    const start = (acc / totalW) * 100
+    const w = (weights[i] / totalW) * 100
+    acc += weights[i]
+    return { s, i, start, w, ms: totalMs ? Math.round((weights[i] / totalW) * totalMs) : null }
+  })
   return (
-    <div ref={root} className="space-y-1">
-      {spans.map((s, i) => {
+    <div ref={root} className="space-y-1.5">
+      {rows.map(({ s, i, start, w, ms }) => {
         const meta = KIND[s.type] || { kind: 'SPAN', color: '#5b6776' }
-        const left = (acc / totalW) * 100
-        const width = (weights[i] / totalW) * 100
-        acc += weights[i]
         const label = s.tool || s.name || s.type
-        const ms = totalMs ? Math.round((weights[i] / totalW) * totalMs) : null
+        const barW = Math.min(Math.max(w - 1.2, 3), 100 - start)  // small gap so bars never touch
         return (
-          <div key={i} className="span-row flex items-center gap-2 text-2xs">
-            <span className="w-32 truncate font-mono text-sub">{label}</span>
-            <span className="px-1 rounded border border-line2 text-muted" style={{ color: meta.color }}>{meta.kind}</span>
-            <div className="flex-1 h-3 relative">
-              <div className="absolute top-0.5 h-2 rounded-sm" style={{
-                left: `${left}%`, width: `${Math.max(width, 2)}%`, background: meta.color, opacity: 0.85,
-              }} />
+          <div key={i} className="grid grid-cols-[136px_52px_1fr_46px] items-center gap-2.5 text-2xs">
+            <span className="truncate font-mono text-sub" title={label}>{label}</span>
+            <span className="justify-self-start px-1.5 py-0.5 rounded border text-[9px] font-semibold tracking-wide"
+              style={{ color: meta.color, borderColor: meta.color + '66', background: meta.color + '14' }}>{meta.kind}</span>
+            <div className="relative h-5 rounded-md bg-raised/70 border border-line/60 overflow-hidden">
+              <div className="span-bar absolute top-1 h-3 rounded-sm" title={`${meta.kind} · ${label}`}
+                style={{ left: `${start}%`, width: `${barW}%`, background: meta.color, boxShadow: `0 0 8px -2px ${meta.color}` }} />
             </div>
-            {ms != null && <span className="tnum text-muted w-10 text-right">{ms}ms</span>}
+            <span className="tnum text-muted text-right">{ms != null ? `${ms}ms` : ''}</span>
           </div>
         )
       })}

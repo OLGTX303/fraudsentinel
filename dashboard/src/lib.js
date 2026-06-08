@@ -76,6 +76,31 @@ export const IP_TYPE = {
   unknown:     { label: 'Unknown network',    icon: 'server',   ok: false },
 }
 
+// ── Card brand (BIN/IIN) detection ────────────────────────────────
+export const CARD_BRANDS = {
+  visa:       { label: 'Visa',             color: '#1a1f71' },
+  mastercard: { label: 'Mastercard',       color: '#eb001b' },
+  amex:       { label: 'American Express',  color: '#2e77bc' },
+  discover:   { label: 'Discover',         color: '#ff6000' },
+  unionpay:   { label: 'UnionPay',         color: '#e21836' },
+  jcb:        { label: 'JCB',              color: '#0b4ea2' },
+  diners:     { label: 'Diners Club',      color: '#0079be' },
+  unknown:    { label: 'Card',             color: '#5b6776' },
+}
+
+export function detectCardBrand(num) {
+  const n = (num || '').replace(/\D/g, '')
+  if (n.length < 1) return ''
+  if (/^4/.test(n)) return 'visa'
+  if (/^3[47]/.test(n)) return 'amex'
+  if (/^(5[1-5]|2(2[2-9]|[3-6]\d|7[01]|720))/.test(n)) return 'mastercard'
+  if (/^62/.test(n)) return 'unionpay'
+  if (/^(6011|65|64[4-9])/.test(n)) return 'discover'
+  if (/^35(2[89]|[3-8]\d)/.test(n)) return 'jcb'
+  if (/^3(0[0-5]|095|6|[89])/.test(n)) return 'diners'
+  return n.length >= 2 ? 'unknown' : ''
+}
+
 export const cls = (...xs) => xs.filter(Boolean).join(' ')
 
 export const fmtMoney = (n) =>

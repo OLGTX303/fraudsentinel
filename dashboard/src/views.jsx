@@ -8,8 +8,9 @@ import {
 } from './lib.js'
 import {
   Panel, Eyebrow, Kpi, DecisionPill, SeverityTag, RiskMeter, Donut, Histogram,
-  Sparkline, TraceWaterfall, Drawer, Empty, AnimatedNumber, dur, PaymentBadge, IpBadge,
+  Sparkline, TraceWaterfall, Drawer, Empty, AnimatedNumber, dur, PaymentBadge, IpBadge, CardBrandMark,
 } from './ui.jsx'
+import { PaymentTester } from './payments.jsx'
 
 // ── Live agent step row ───────────────────────────────────────────
 function StepRow({ step }) {
@@ -63,133 +64,6 @@ function FeedbackBar({ result, onDone }) {
   )
 }
 
-// ── Interactive payment tester (real checkout to fire a fraud check) ──
-const NETWORKS = {
-  residential: { ip: '104.18.12.101', country: 'US', intl: false, label: 'Home', icon: 'wifi' },
-  business:    { ip: '212.58.244.18', country: 'US', intl: false, label: 'Business', icon: 'building' },
-  datacenter:  { ip: '185.220.101.45', country: 'MD', intl: true,  label: 'Datacenter', icon: 'server' },
-}
-const METHOD_TABS = [
-  { id: 'card', label: 'Card', icon: 'card' },
-  { id: 'apple_pay', label: 'Apple Pay', icon: 'wallet' },
-  { id: 'google_pay', label: 'Google Pay', icon: 'wallet' },
-  { id: 'paypal', label: 'PayPal', icon: 'wallet' },
-]
-
-function PaymentTester({ onRun, disabled }) {
-  const [method, setMethod] = useState('card')
-  const [amount, setAmount] = useState('4200.00')
-  const [merchant, setMerchant] = useState('ElectroMart Online')
-  const [card, setCard] = useState('4111 1111 1111 1111')
-  const [exp, setExp] = useState('08/27')
-  const [cvv, setCvv] = useState('123')
-  const [name, setName] = useState('Alex Rivera')
-  const [network, setNetwork] = useState('datacenter')
-
-  const fmtCard = (v) => v.replace(/\D/g, '').slice(0, 19).replace(/(\d{4})(?=\d)/g, '$1 ').trim()
-
-  const pay = () => {
-    if (disabled) return
-    const n = NETWORKS[network]
-    const digits = card.replace(/\D/g, '')
-    onRun({
-      account_id: 'ACC-CHECKOUT-001', amount: Number(amount) || 0, currency: 'USD',
-      merchant: merchant || 'Merchant', merchant_category: 'general',
-      card_country: 'US', ip_address: n.ip, ip_country: n.country,
-      device_id: 'DEV-CHECKOUT-01', is_international: n.intl, hour_of_day: new Date().getHours(),
-      card_token: method === 'card' ? (digits || '0000') : '0000', payment_method: method,
-    }, 'checkout')
-  }
-
-  const amountNum = Number(amount) || 0
-  const inputCls = 'w-full bg-ink border border-line rounded-md px-2.5 py-2 text-xs text-txt focus:border-brand/50 outline-none'
-
-  return (
-    <div className="space-y-3">
-      {/* method tabs */}
-      <div className="grid grid-cols-4 gap-1.5">
-        {METHOD_TABS.map(t => (
-          <button key={t.id} onClick={() => setMethod(t.id)}
-            className={cls('flex flex-col items-center gap-1 py-2 rounded-lg border text-[10px] transition-all',
-              method === t.id ? 'border-brand/50 bg-brand/10 text-txt' : 'border-line text-muted hover:text-sub hover:border-line2')}>
-            <Icon name={t.icon} size={16} />{t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* amount + merchant */}
-      <div className="grid grid-cols-2 gap-2">
-        <label className="block"><span className="text-2xs text-muted">Amount (USD)</span>
-          <input value={amount} onChange={e => setAmount(e.target.value)} inputMode="decimal" className={cls(inputCls, 'mt-0.5 font-mono')} /></label>
-        <label className="block"><span className="text-2xs text-muted">Merchant</span>
-          <input value={merchant} onChange={e => setMerchant(e.target.value)} className={cls(inputCls, 'mt-0.5')} /></label>
-      </div>
-
-      {/* card fields */}
-      {method === 'card' && (
-        <div className="space-y-2 rounded-lg border border-line bg-raised/40 p-2.5">
-          <label className="block"><span className="text-2xs text-muted">Card number</span>
-            <div className="mt-0.5 flex items-center gap-2">
-              <span className="text-muted"><Icon name="card" size={14} /></span>
-              <input value={card} onChange={e => setCard(fmtCard(e.target.value))} inputMode="numeric"
-                className="flex-1 bg-transparent text-xs font-mono text-txt outline-none" placeholder="4111 1111 1111 1111" />
-            </div>
-          </label>
-          <div className="grid grid-cols-3 gap-2">
-            <label className="block col-span-1"><span className="text-2xs text-muted">Expiry</span>
-              <input value={exp} onChange={e => setExp(e.target.value)} className={cls(inputCls, 'mt-0.5 font-mono')} placeholder="MM/YY" /></label>
-            <label className="block col-span-1"><span className="text-2xs text-muted">CVV</span>
-              <input value={cvv} onChange={e => setCvv(e.target.value.replace(/\D/g, '').slice(0, 4))} className={cls(inputCls, 'mt-0.5 font-mono')} placeholder="123" /></label>
-            <label className="block col-span-1"><span className="text-2xs text-muted">Name</span>
-              <input value={name} onChange={e => setName(e.target.value)} className={cls(inputCls, 'mt-0.5')} /></label>
-          </div>
-          <div className="text-[10px] text-muted">Tip: <span className="font-mono text-sub">4111 1111 1111 1111</span> is on the threat blocklist.</div>
-        </div>
-      )}
-      {method !== 'card' && (
-        <div className="rounded-lg border border-line bg-raised/40 p-2.5 text-2xs text-sub flex items-center gap-2">
-          <Icon name="lock" size={13} className="text-allow" />
-          {PAYMENT[method].label} uses a device-bound token — no raw card data is shared with the merchant.
-        </div>
-      )}
-
-      {/* network selector — to test the broadband-only rule */}
-      <div>
-        <div className="eyebrow mb-1.5">Network (test the broadband-only rule)</div>
-        <div className="grid grid-cols-3 gap-1.5">
-          {Object.entries(NETWORKS).map(([k, n]) => (
-            <button key={k} onClick={() => setNetwork(k)}
-              className={cls('flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-[10px] transition-all',
-                network === k
-                  ? (k === 'datacenter' ? 'border-block/50 bg-block/10 text-block' : 'border-allow/50 bg-allow/10 text-allow')
-                  : 'border-line text-muted hover:text-sub')}>
-              <Icon name={n.icon} size={13} /> {n.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* pay button — branded per method */}
-      <PayButton method={method} amount={amountNum} disabled={disabled} onClick={pay} />
-    </div>
-  )
-}
-
-function PayButton({ method, amount, disabled, onClick }) {
-  const money = `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-  const base = 'w-full py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50'
-  if (method === 'apple_pay')
-    return <button disabled={disabled} onClick={onClick} className={cls(base, 'bg-black text-white hover:bg-black/90')}>
-      <Icon name="wallet" size={14} /> <span className="font-semibold">Apple&nbsp;Pay</span> · {money}</button>
-  if (method === 'google_pay')
-    return <button disabled={disabled} onClick={onClick} className={cls(base, 'bg-white text-[#3c4043] border border-line2 hover:bg-white/90')}>
-      <span className="font-semibold"><span className="text-[#4285F4]">G</span>oogle&nbsp;Pay</span> · {money}</button>
-  if (method === 'paypal')
-    return <button disabled={disabled} onClick={onClick} className={cls(base, 'bg-[#ffc439] text-[#003087] hover:brightness-105')}>
-      <span className="font-bold italic">Pay<span className="text-[#0070ba]">Pal</span></span> · {money}</button>
-  return <button disabled={disabled} onClick={onClick} className={cls(base, 'bg-brand text-onbrand hover:brightness-110 shadow-glow')}>
-    <Icon name="lock" size={14} /> Pay {money}</button>
-}
 
 // ══════════════════════════════════════════════════════════════════
 // CONSOLE
@@ -256,7 +130,8 @@ export function Console({ ctx }) {
               </button>
             </div>
           ) : (
-            <PaymentTester onRun={runCustom} disabled={running || !connected} />
+            <PaymentTester onRun={runCustom} disabled={running || !connected} latest={latest}
+              sampleKey={scenario} sample={SCENARIO_TX[scenario]} />
           )}
 
           <div className="hr my-3" />
@@ -390,10 +265,16 @@ function LatestCard({ result, openTrace, refreshMetrics }) {
           <RiskMeter score={r.risk_score} />
           <div>
             <Eyebrow>Payment & network</Eyebrow>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
               <PaymentBadge method={r.payment_method} />
+              {r.bin_info?.brand && <CardBrandMark brand={r.bin_info.brand} />}
               <IpBadge type={r.ip_connection_type} />
             </div>
+            {r.bin_info?.available && (
+              <div className={cls('mt-1.5 text-2xs flex items-start gap-1.5', r.bin_info.high_risk || r.bin_info.country_mismatch ? 'text-block' : 'text-sub')}>
+                <Icon name="search" size={11} className="mt-0.5" /> BIN {r.bin_info.bin}: {r.bin_info.note}
+              </div>
+            )}
           </div>
           <div>
             <Eyebrow>Agent reasoning</Eyebrow>
@@ -540,10 +421,16 @@ function CaseDetail({ c, onClose, openTrace, refresh }) {
         <button onClick={onClose} aria-label="Close case detail" className="ml-auto text-muted hover:text-txt"><Icon name="x" size={18} /></button>
       </div>
       <RiskMeter score={c.risk_score} />
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         <PaymentBadge method={c.payment_method} />
+        {c.bin_info?.brand && <CardBrandMark brand={c.bin_info.brand} />}
         <IpBadge type={c.ip_connection_type} />
       </div>
+      {c.bin_info?.available && (
+        <div className={cls('text-2xs flex items-start gap-1.5', c.bin_info.high_risk || c.bin_info.country_mismatch ? 'text-block' : 'text-sub')}>
+          <Icon name="search" size={11} className="mt-0.5" /> BIN {c.bin_info.bin}: {c.bin_info.note}
+        </div>
+      )}
       <div>
         <Eyebrow>Reasoning</Eyebrow>
         <p className="text-sm text-txt/90 leading-relaxed">{c.reasoning}</p>

@@ -44,13 +44,15 @@ import hmac
 from agent.models import (
     Transaction, InvestigationResult, WebSocketMessage,
     RuleViolation, ThreatHit, AccountHistory,
-    FeedbackRequest, SimulateRequest, LoginRequest, ChatRequest,
+    FeedbackRequest, SimulateRequest, LoginRequest, ChatRequest, ApplePayValidateRequest,
+    StripeIntentRequest, StripeFinalizeRequest,
 )
 from agent.tools.risk_scorer import score_transaction
 from agent.tools.rule_engine import evaluate_rules
 from agent.tools.threat_feed import check_threat_feeds
 from agent.tools.history_lookup import get_account_history, get_related_transactions
 from agent.tools.ip_classifier import classify_ip, label as ip_label
+from agent.tools.bin_check import bin_check, bin_violations
 from agent.prompts.investigation import (
     INVESTIGATION_SYSTEM, build_investigation_prompt,
     SAR_SYSTEM, build_sar_prompt,
@@ -214,6 +216,14 @@ async def run_investigation(
     await emit("tool_result", {"tool": "threat_feed", "result": threats.model_dump()})
     tracer.log_span("threat_feed", {"ip": tx.ip_address}, threats.model_dump(), trace_id)
 
+    # ── Step 4.5: Card BIN pre-check (fraud control) ──────────────
+    await emit("tool_call", {"tool": "bin_check", "inputs": {"method": tx.payment_method}})
+    bin_info = await asyncio.to_thread(bin_check, tx.card_token, tx.card_country)
+    await emit("tool_result", {"tool": "bin_check", "result": bin_info})
+    tracer.log_span("bin_check", {"card_token": "***", "country": tx.card_country}, bin_info, trace_id)
+    for bv in bin_violations(bin_info):
+        violations.append(RuleViolation(**bv))
+
     # ── Step 5: Gemini reasoning (agentic when creds present) ─────
     await emit("tool_call", {"tool": "gemini_reasoning",
                              "inputs": {"model": GEMINI_MODEL, "mode": AGENT_MODE}})
@@ -295,6 +305,7 @@ async def run_investigation(
         account_id=tx.account_id,
         payment_method=tx.payment_method,
         ip_connection_type=classify_ip(tx.ip_address),
+        bin_info=bin_info,
     )
     tracer.log_investigation(result)
     _store_result(result)
@@ -747,6 +758,130 @@ async def metrics():
     }
 
 
+@api.post("/applepay/validate")
+async def applepay_validate(req: ApplePayValidateRequest, request: Request):
+    """Apple Pay merchant validation. Performs the real mTLS call to Apple only
+    when an Apple merchant identity cert is configured; otherwise returns 501 so
+    the frontend falls back gracefully (the native sheet/QR still appears)."""
+    _require_auth(request)
+    cert = os.getenv("APPLEPAY_MERCHANT_CERT", "")          # path to PEM cert(+key)
+    mid = os.getenv("APPLEPAY_MERCHANT_ID", "")
+    domain = os.getenv("APPLEPAY_DOMAIN", "fraudsentinel.olgtx.dpdns.org")
+    if not (cert and mid):
+        raise HTTPException(status_code=501,
+                            detail="Apple Pay merchant validation not configured "
+                                   "(set APPLEPAY_MERCHANT_CERT + APPLEPAY_MERCHANT_ID).")
+    # Only Apple's own apple-pay-gateway domains are valid validation URLs.
+    if "apple-pay-gateway" not in req.validationURL and "apple.com" not in req.validationURL:
+        raise HTTPException(status_code=400, detail="Invalid validation URL.")
+    import httpx
+    payload = {"merchantIdentifier": mid, "displayName": "FraudSentinel",
+               "initiative": "web", "initiativeContext": domain}
+    async with httpx.AsyncClient(cert=cert, timeout=15.0) as client:
+        r = await client.post(req.validationURL, json=payload)
+        return r.json()
+
+
+# ── Stripe: real payment collection, analysed by our own agent ────────
+# The secret key never leaves the backend. We authorise with manual capture so
+# FraudSentinel decides whether the money actually moves: ALLOW/FLAG → capture,
+# BLOCK → void the authorisation.
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+
+# Per-brand representative BIN so the BIN pre-check tool still has a 6-digit IIN
+# (Stripe only returns brand + last4, never the full PAN).
+_BRAND_BIN = {
+    "visa": "424242", "mastercard": "555555", "amex": "378282",
+    "unionpay": "620000", "discover": "601111", "jcb": "353011",
+    "diners": "305693",
+}
+
+
+def _stripe():
+    """Lazily import + configure the Stripe SDK; raise 501 if not set up."""
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=501, detail="Stripe is not configured (set STRIPE_SECRET_KEY).")
+    import stripe
+    stripe.api_key = STRIPE_SECRET_KEY
+    return stripe
+
+
+@api.get("/stripe/config")
+async def stripe_config():
+    """Publishable key for Stripe.js (safe to expose) + whether Stripe is live."""
+    return {"enabled": bool(STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY),
+            "publishable_key": STRIPE_PUBLISHABLE_KEY}
+
+
+@api.post("/stripe/intent")
+async def stripe_intent(req: StripeIntentRequest, request: Request):
+    """Create a manual-capture PaymentIntent so the agent gates the capture."""
+    _require_auth(request)
+    stripe = _stripe()
+    intent = stripe.PaymentIntent.create(
+        amount=max(50, int(round(req.amount * 100))),     # cents; Stripe min ~$0.50
+        currency=req.currency.lower(),
+        capture_method="manual",
+        automatic_payment_methods={"enabled": True},
+        description="FraudSentinel agent-gated authorisation",
+    )
+    return {"client_secret": intent.client_secret, "id": intent.id}
+
+
+@api.get("/stripe/card/{intent_id}")
+async def stripe_card(intent_id: str, request: Request):
+    """Retrieve the REAL card metadata Stripe captured (brand, last4, country, funding)."""
+    _require_auth(request)
+    stripe = _stripe()
+    # Stripe objects support attribute access (not dict.get on the top object).
+    intent = stripe.PaymentIntent.retrieve(intent_id, expand=["payment_method"])
+    pm = getattr(intent, "payment_method", None)
+    card = getattr(pm, "card", None) if pm is not None else None
+    brand = getattr(card, "brand", None) if card is not None else None
+    wallet_obj = getattr(card, "wallet", None) if card is not None else None
+    wallet_type = getattr(wallet_obj, "type", None) if wallet_obj is not None else None
+    return {
+        "type": getattr(pm, "type", None) if pm is not None else None,  # card / paypal / link / ...
+        "brand": brand,
+        "last4": getattr(card, "last4", None) if card is not None else None,
+        "funding": getattr(card, "funding", None) if card is not None else None,
+        "country": getattr(card, "country", None) if card is not None else None,
+        "wallet": wallet_type,
+        "bin": _BRAND_BIN.get((brand or "").lower(), "000000"),
+        "status": getattr(intent, "status", None),
+    }
+
+
+@api.post("/stripe/finalize")
+async def stripe_finalize(req: StripeFinalizeRequest, request: Request):
+    """The agent's verdict moves (or voids) the money: ALLOW/FLAG capture, BLOCK void."""
+    _require_auth(request)
+    stripe = _stripe()
+    try:
+        pi = stripe.PaymentIntent.retrieve(req.payment_intent_id)
+        status = getattr(pi, "status", "")
+        if req.decision == "BLOCK":
+            # Already-terminal authorisations count as voided for the demo.
+            if status in ("canceled",):
+                return {"action": "voided", "status": status}
+            if status in ("requires_capture", "requires_confirmation", "requires_action",
+                          "requires_payment_method", "processing"):
+                intent = stripe.PaymentIntent.cancel(req.payment_intent_id)
+                return {"action": "voided", "status": getattr(intent, "status", "canceled")}
+            return {"action": "voided", "status": status}   # nothing captured → effectively void
+        # ALLOW / FLAG → capture the authorised funds.
+        if status == "requires_capture":
+            intent = stripe.PaymentIntent.capture(req.payment_intent_id)
+            return {"action": "captured", "status": getattr(intent, "status", "succeeded")}
+        if status == "succeeded":
+            return {"action": "captured", "status": status}
+        return {"action": "noop", "status": status}
+    except Exception as e:
+        console.print(f"[red]stripe finalize error:[/red] {e}")
+        return {"action": "noop", "status": "error", "detail": str(e)[:200]}
+
+
 @api.post("/feedback")
 async def feedback(req: FeedbackRequest):
     """Human-in-the-loop: an analyst confirms or overrides the agent's call."""
@@ -813,11 +948,14 @@ def _chat_answer(message: str, result: InvestigationResult | None) -> str:
         return f"{header()} {result.reasoning} Key drivers: {sigs}."
     if any(k in m for k in ("sar", "report")):
         return result.sar_draft or "No SAR was drafted (a SAR is only generated on a BLOCK)."
+    bi = result.bin_info or {}
+    bin_line = (f"• BIN pre-check: {bi['note']}\n" if bi.get("available") else "")
     # Default: full digest
     return (
         f"{header()}\n"
         f"• Merchant: {result.merchant} — {fmt_money(result.amount)}\n"
         f"• Payment method: {pm_name} ({_PM_NOTE.get(pm,'')})\n"
+        f"{bin_line}"
         f"• Network: {conn_name} "
         f"{'✓ accepted' if conn in ('residential','business') else '✗ refused — datacenter/IDC not allowed'}\n"
         f"• Threat intel: IP {th.risk_level}{' (flagged)' if th.ip_flagged else ''}, "

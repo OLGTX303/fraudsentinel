@@ -58,6 +58,7 @@ export const toolIconName = {
   risk_scorer:      'cpu',
   rule_engine:      'scale',
   threat_feed:      'search',
+  bin_check:        'card',
   related_lookup:   'link',
   gemini_reasoning: 'gem',
   sar_drafter:      'file',

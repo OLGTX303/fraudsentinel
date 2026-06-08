@@ -93,7 +93,7 @@ function AppShell({ auth }) {
   return (
     <div ref={appRef} className="h-full flex bp-radial">
       {/* ── Sidebar rail ───────────────────────────────────────── */}
-      <aside className="fs-rail w-[210px] shrink-0 border-r border-line bg-surface/80 flex flex-col">
+      <aside className="fs-rail w-[210px] shrink-0 border-r border-line bg-surface/80 hidden md:flex flex-col">
         <div className="px-4 py-4 flex items-center gap-2.5 border-b border-line">
           <span className="relative grid place-items-center w-8 h-8 rounded-lg bg-brand/15 border border-brand/30 text-brand">
             <Icon name="shield" size={18} />
@@ -150,7 +150,25 @@ function AppShell({ auth }) {
 
       {/* ── Main column ────────────────────────────────────────── */}
       <div className="flex-1 min-w-0 flex flex-col bp-grid">
-        <header className="fs-top flex items-center gap-4 px-6 h-16 border-b border-line bg-surface/60 backdrop-blur">
+        {/* Mobile top nav (sidebar is hidden < md) */}
+        <div className="md:hidden flex items-center gap-1 px-3 h-12 border-b border-line bg-surface/85 backdrop-blur overflow-x-auto no-scrollbar">
+          <span className="flex items-center gap-1.5 mr-1 shrink-0">
+            <Icon name="shield" size={16} className="text-brand" />
+            <span className="text-sm font-semibold grad-text">FraudSentinel</span>
+          </span>
+          {NAV.map(n => (
+            <button key={n.id} onClick={() => setView(n.id)}
+              className={cls('shrink-0 px-2.5 py-1 rounded-md text-xs flex items-center gap-1.5 transition-colors',
+                view === n.id ? 'bg-raised text-brand' : 'text-sub hover:text-txt')}>
+              <Icon name={n.icon} size={14} />{n.label}
+            </button>
+          ))}
+          <button onClick={signOut} aria-label="Sign out" className="ml-auto shrink-0 text-muted hover:text-block p-1">
+            <Icon name="x" size={15} />
+          </button>
+        </div>
+
+        <header className="fs-top flex items-center gap-4 px-4 md:px-6 h-14 md:h-16 border-b border-line bg-surface/60 backdrop-blur">
           <div>
             <h1 className="text-base font-semibold tracking-tight">{title}</h1>
             <p className="text-2xs text-muted">{subtitle}</p>
@@ -169,7 +187,7 @@ function AppShell({ auth }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-6 py-6">
+        <main className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-6">
           <div ref={viewRef} className="max-w-6xl mx-auto">
             {view === 'console'   && <Console ctx={ctx} />}
             {view === 'cases'     && <Cases ctx={ctx} />}
