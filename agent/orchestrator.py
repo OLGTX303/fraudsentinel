@@ -814,6 +814,11 @@ async def stripe_config():
             "publishable_key": STRIPE_PUBLISHABLE_KEY}
 
 
+# Marker stamped on every PaymentIntent we create so finalize can only ever
+# capture/void our own authorisations (never an arbitrary intent in the account).
+_STRIPE_MARK = "fraudsentinel-agent-gated"
+
+
 @api.post("/stripe/intent")
 async def stripe_intent(req: StripeIntentRequest, request: Request):
     """Create a manual-capture PaymentIntent so the agent gates the capture."""
@@ -825,6 +830,7 @@ async def stripe_intent(req: StripeIntentRequest, request: Request):
         capture_method="manual",
         automatic_payment_methods={"enabled": True},
         description="FraudSentinel agent-gated authorisation",
+        metadata={"source": _STRIPE_MARK},
     )
     return {"client_secret": intent.client_secret, "id": intent.id}
 
@@ -860,6 +866,10 @@ async def stripe_finalize(req: StripeFinalizeRequest, request: Request):
     stripe = _stripe()
     try:
         pi = stripe.PaymentIntent.retrieve(req.payment_intent_id)
+        # Only ever act on intents this service created.
+        meta = getattr(pi, "metadata", None) or {}
+        if (meta.get("source") if hasattr(meta, "get") else None) != _STRIPE_MARK:
+            raise HTTPException(status_code=403, detail="Not a FraudSentinel-managed payment.")
         status = getattr(pi, "status", "")
         if req.decision == "BLOCK":
             # Already-terminal authorisations count as voided for the demo.
@@ -877,6 +887,8 @@ async def stripe_finalize(req: StripeFinalizeRequest, request: Request):
         if status == "succeeded":
             return {"action": "captured", "status": status}
         return {"action": "noop", "status": status}
+    except HTTPException:
+        raise
     except Exception as e:
         console.print(f"[red]stripe finalize error:[/red] {e}")
         return {"action": "noop", "status": "error", "detail": str(e)[:200]}

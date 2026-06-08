@@ -84,6 +84,18 @@ export function Console({ ctx }) {
     send({ type: 'investigate', scenario: label, transaction: { transaction_id: `TXN-CUSTOM-${Date.now()}`, ...data, timestamp: new Date().toISOString() } })
   }
 
+  // Demo hook (only when ?demo=1): lets a recorder fire any payment rail live so
+  // every method streams through the same investigation. No effect for real users.
+  useEffect(() => {
+    if (typeof window === 'undefined' || new URLSearchParams(window.location.search).get('demo') !== '1') return
+    window.fsDemoPay = (method = 'card', sampleKey = 'fraud') => {
+      const s = SCENARIO_TX[sampleKey] || SCENARIO_TX.fraud
+      runCustom({ ...s, payment_method: method,
+        card_token: method === 'card' ? (s.card_token || '4242424242424242') : '0000' }, method)
+    }
+    return () => { try { delete window.fsDemoPay } catch {} }
+  }, []) // eslint-disable-line
+
   // Auto-stream a random scenario on an interval (demo: builds drift + volume).
   useEffect(() => {
     if (!auto) { clearInterval(autoRef.current); return }
@@ -392,8 +404,12 @@ export function Cases({ ctx }) {
                   <td className="px-4 py-2.5 text-txt">{c.merchant}</td>
                   <td className="px-4 py-2.5 tnum text-sub">{fmtMoney(c.amount)}</td>
                   <td className="px-4 py-2.5 tnum" style={{ color: c.risk_score < 0.4 ? '#3fb950' : c.risk_score < 0.7 ? '#f0b429' : '#f85149' }}>{c.risk_score.toFixed(2)}</td>
-                  <td className="px-4 py-2.5">{c.decision_method === 'agentic' ? <span className="text-brand">⬡</span> : <span className="text-muted">·</span>}
-                    {c.analyst_override && <span className="ml-1.5 text-flag" title="Analyst override"><Icon name="userCheck" size={12} /></span>}</td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-1.5">
+                      {c.payment_method ? <PaymentBadge method={c.payment_method} /> : <span className="text-muted">·</span>}
+                      {c.decision_method === 'agentic' && <span className="text-brand" title="Agentic decision">⬡</span>}
+                      {c.analyst_override && <span className="text-flag" title="Analyst override"><Icon name="userCheck" size={12} /></span>}
+                    </div></td>
                   <td className="px-4 py-2.5 text-muted"><Icon name="chevronR" size={14} /></td>
                 </tr>
               ))}
