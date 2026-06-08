@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { Icon } from './icons.jsx'
@@ -21,6 +21,24 @@ export function useAuth() {
     localStorage.setItem(KEY, JSON.stringify(record)); setUser(record)
   }, [])
   const signOut = useCallback(() => { localStorage.removeItem(KEY); setUser(null) }, [])
+
+  // One-click judge access: ?judge=1 (or ?login=demo) signs in the public demo
+  // account via /api/demo-login — no password typing. The password never appears
+  // in the URL or the bundle.
+  useEffect(() => {
+    if (user || typeof window === 'undefined') return
+    const q = new URLSearchParams(window.location.search)
+    if (q.get('judge') !== '1' && q.get('login') !== 'demo') return
+    fetch('/api/demo-login').then(r => r.json()).then(d => {
+      if (!d?.token) return
+      const rec = { token: d.token, ...d.user }
+      localStorage.setItem(KEY, JSON.stringify(rec)); setUser(rec)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('judge'); url.searchParams.delete('login')
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash)
+    }).catch(() => {})
+  }, []) // eslint-disable-line
+
   return { user, signIn, signOut }
 }
 

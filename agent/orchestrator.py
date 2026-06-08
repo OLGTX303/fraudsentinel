@@ -667,11 +667,22 @@ async def health():
 
 @api.post("/login")
 async def login(req: LoginRequest):
-    """The only authentication path: the single demo account + complex password."""
+    """The only password authentication path: the single demo account + complex password."""
     user_ok = req.username.strip().lower() == DEMO_USERNAME.lower()
     pass_ok = hmac.compare_digest(req.password, DEMO_PASSWORD)
     if not (user_ok and pass_ok):
         raise HTTPException(status_code=401, detail="Invalid username or password.")
+    return {
+        "token": AUTH_TOKEN,
+        "user": {"email": DEMO_USERNAME, "name": "Demo Analyst", "role": "Fraud analyst"},
+    }
+
+
+@api.get("/demo-login")
+async def demo_login():
+    """One-click access for hackathon judges: signs in the public demo account
+    without typing the password (the same single, rate-limited account). The
+    dashboard hits this when opened with ?judge=1."""
     return {
         "token": AUTH_TOKEN,
         "user": {"email": DEMO_USERNAME, "name": "Demo Analyst", "role": "Fraud analyst"},
