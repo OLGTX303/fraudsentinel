@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { Icon } from './icons.jsx'
@@ -287,15 +288,19 @@ export function Drawer({ open, onClose, children, width = 'max-w-xl' }) {
         onComplete: () => gsap.set([back.current, panel.current], { display: 'none' }) })
     }
   }, { dependencies: [open] })
-  return (
+  // Portal to <body> so the fixed overlay is never trapped by an ancestor with
+  // a CSS transform (the GSAP view transition) — which clipped it to a small box.
+  if (typeof document === 'undefined') return null
+  return createPortal(
     <>
       <div ref={back} onClick={onClose} style={{ display: 'none' }}
-        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
+        className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm" />
       <div ref={panel} style={{ display: 'none' }}
-        className={cls('fixed right-0 top-0 z-50 h-full w-full bg-surface border-l border-line overflow-y-auto', width)}>
+        className={cls('fixed right-0 top-0 z-[61] h-full w-full bg-surface border-l border-line shadow-2xl overflow-y-auto', width)}>
         {children}
       </div>
-    </>
+    </>,
+    document.body,
   )
 }
 
